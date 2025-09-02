@@ -254,9 +254,19 @@ ICACHE_RAM_ATTR void rotaryEncoder()
   uint8_t encoderStatus = encoder.process();
   if(encoderStatus)
   {
-    encoderCount = encoderStatus==DIR_CW? 1 : -1;
+    encoderCount += encoderStatus==DIR_CW? 1 : -1;
     seekStop = true;
   }
+}
+
+int consumeEncoderCount()
+{
+  int encCount;
+  noInterrupts();
+  encCount = encoderCount > 0 ? 1 : (encoderCount < 0 ? -1 : 0);
+  encoderCount -= encCount;
+  interrupts();
+  return encCount;
 }
 
 //
@@ -710,11 +720,13 @@ void loop()
 {
   uint32_t currentTime = millis();
   bool needRedraw = false;
-
+  int encCount = consumeEncoderCount();
   ButtonTracker::State pb1st = pb1.update(digitalRead(ENCODER_PUSH_BUTTON) == LOW);
 
   // Periodically print status to serial
   remoteTickTime();
+
+  if(encCount) setCpuFrequencyMhz(240);
 
   // Receive and execute serial command
   if(Serial.available()>0)
@@ -723,23 +735,23 @@ void loop()
     needRedraw |= !!(revent & REMOTE_CHANGED);
     pb1st.wasClicked |= !!(revent & REMOTE_CLICK);
     int direction = revent >> REMOTE_DIRECTION;
-    encoderCount = direction? direction : encoderCount;
+    encCount = direction? direction : encCount;
     if(revent & REMOTE_PREFS) prefsRequestSave(SAVE_ALL);
   }
 
   int ble_event = bleDoCommand(bleModeIdx);
 
   // Block encoder rotation when in the locked sleep mode
-  if(encoderCount && sleepOn() && sleepModeIdx==SLEEP_LOCKED) encoderCount = 0;
+  if(encCount && sleepOn() && sleepModeIdx==SLEEP_LOCKED) encCount = 0;
 
   // Activate push and rotate mode (can span multiple loop iterations until the button is released)
-  if (encoderCount && pb1st.isPressed) pushAndRotate = true;
+  if (encCount && pb1st.isPressed) pushAndRotate = true;
 
   // If push and rotate mode is active...
   if(pushAndRotate)
   {
     // If encoder has been rotated
-    if(encoderCount)
+    if(encCount)
     {
       switch(currentCmd)
       {
@@ -750,24 +762,21 @@ void loop()
           break;
         case CMD_FREQ:
           // Select digit
-          doSelectDigit(encoderCount);
+          doSelectDigit(encCount);
           needRedraw = true;
           break;
         case CMD_SEEK:
           // Normal tuning in seek mode
-          needRedraw |= doTune(encoderCount);
+          needRedraw |= doTune(encCount);
           // Current frequency may have changed
           prefsRequestSave(SAVE_CUR_BAND);
           break;
         case CMD_SCAN:
           // Fast tuning in scan mode
-          needRedraw |= doTune(encoderCount, true);
+          needRedraw |= doTune(encCount, true);
           prefsRequestSave(SAVE_CUR_BAND);
           break;
       }
-
-      // Clear encoder rotation
-      encoderCount = 0;
     }
     // Reset timeouts while push and rotate is active
     elapsedSleep = elapsedCommand = currentTime;
@@ -775,26 +784,26 @@ void loop()
   else
   {
     // If encoder has been rotated
-    if(encoderCount)
+    if(encCount)
     {
       switch(currentCmd)
       {
         case CMD_NONE:
         case CMD_SCAN:
           // Tuning
-          needRedraw |= doTune(encoderCount);
+          needRedraw |= doTune(encCount);
           // Current frequency may have changed
           prefsRequestSave(SAVE_CUR_BAND);
           break;
         case CMD_FREQ:
           // Digit tuning
-          needRedraw |= doDigit(encoderCount);
+          needRedraw |= doDigit(encCount);
           // Current frequency may have changed
           prefsRequestSave(SAVE_CUR_BAND);
           break;
         case CMD_SEEK:
           // Seek mode
-          needRedraw |= doSeek(encoderCount);
+          needRedraw |= doSeek(encCount);
           // Seek can take long time, renew the timestamp
           currentTime = millis();
           // Current frequency may have changed
@@ -802,7 +811,7 @@ void loop()
           break;
         default:
           // Side bar menus / settings
-          needRedraw |= doSideBar(currentCmd, encoderCount);
+          needRedraw |= doSideBar(currentCmd, encCount);
           // Current settings, etc. may have changed
           prefsRequestSave(SAVE_ALL);
           break;
@@ -810,9 +819,6 @@ void loop()
 
       // Reset timeouts
       elapsedSleep = elapsedCommand = currentTime;
-
-      // Clear encoder rotation
-      encoderCount = 0;
     }
     else if(pb1st.isLongPressed)
     {
@@ -888,6 +894,7 @@ void loop()
   // Disable commands control
   if((currentTime - elapsedCommand) > ELAPSED_COMMAND)
   {
+    setCpuFrequencyMhz(80);
     if(currentCmd != CMD_NONE && currentCmd != CMD_SEEK && currentCmd != CMD_SCAN && currentCmd != CMD_MEMORY)
     {
       currentCmd = CMD_NONE;
