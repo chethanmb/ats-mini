@@ -1,3 +1,5 @@
+[![Build Firmware](https://github.com/chethanmb/ats-mini/actions/workflows/build.yml/badge.svg)](https://github.com/chethanmb/ats-mini/actions/workflows/build.yml)
+
 # ATS Mini
 
 ![](docs/source/_static/esp32-si4732-ui-theme.jpg)
