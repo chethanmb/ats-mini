@@ -705,13 +705,13 @@ void handleSpecialMode() {
 
 void checkSpecialModeEntry(int16_t encCount) {
     unsigned long currentTime = millis();
-    
+
     if (encCount != 0) {
         // If this is first rotation or we timed out, reset counter
         if (currentTime - lastRotationTime > SPECIAL_MODE_TIMEOUT) {
             rotationCount = 0;
         }
-        
+
         // Update rotation count and time
         rotationCount += abs(encCount);
         lastRotationTime = currentTime;
