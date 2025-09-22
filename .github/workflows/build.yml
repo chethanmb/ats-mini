@@ -22,11 +22,6 @@ on:
       - '.github/workflows/build.yml'
       - '.pre-commit-config.yaml'
   workflow_dispatch:
-    inputs:
-      revision:
-        description: "A tag to release, e.g. v1.00"
-        type: string
-        required: false
 
 jobs:
   build:
